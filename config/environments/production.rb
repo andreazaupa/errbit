@@ -38,7 +38,14 @@ Errbit::Application.configure do
   # config.action_mailer.raise_delivery_errors = false
 
   # Set default host for ActionMailer links
-  config.action_mailer.default_url_options = { :host => ENV['ERRBIT_HOST'] } if ENV['ERRBIT_HOST']
+  # config.action_mailer.default_url_options = { :host => ENV['ERRBIT_HOST'] } if ENV['ERRBIT_HOST']
+  config.action_mailer.default_url_options = { :host => "errors.lab.develon.com"}
+      config.action_mailer.delivery_method = :smtp
+      config.action_mailer.smtp_settings = {
+       :address => 'localhost',
+       :port  => '25'
+      }
+  
 
   # Enable threaded mode
   # config.threadsafe!

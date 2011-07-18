@@ -11,10 +11,10 @@ gem 'redmine_client', :git => "git://github.com/oruen/redmine_client.git"
 gem 'mongoid_rails_migrations'
 gem 'useragent', '~> 0.3.1'
 gem 'pivotal-tracker'
-
-platform :ruby do
-  gem 'bson_ext', '~> 1.2'
-end
+gem 'bson_ext', '~> 1.2'
+# platform :ruby do
+#   
+# end
 
 group :development, :test do
   gem 'rspec-rails', '~> 2.5'
@@ -28,6 +28,6 @@ group :test do
   gem 'email_spec'
 end
 
-group :heroku do
-  gem 'thin'
-end
+# group :heroku do
+#   gem 'thin'
+# end
