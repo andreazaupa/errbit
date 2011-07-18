@@ -35,16 +35,16 @@ Errbit::Application.configure do
   # config.action_controller.asset_host = "http://assets.example.com"
 
   # Disable delivery errors, bad email addresses will be ignored
-  # config.action_mailer.raise_delivery_errors = false
+  config.action_mailer.raise_delivery_errors = true
 
   # Set default host for ActionMailer links
   # config.action_mailer.default_url_options = { :host => ENV['ERRBIT_HOST'] } if ENV['ERRBIT_HOST']
   config.action_mailer.default_url_options = { :host => "errors.lab.develon.com"}
-  config.action_mailer.delivery_method = :sendmail
-  # config.action_mailer.smtp_settings = {
-  #  :address => 'localhost',
-  #  :port  => '25'
-  # }
+  config.action_mailer.delivery_method = :smtp
+  config.action_mailer.smtp_settings = {
+   :address => 'localhost',
+   :port  => '25'
+  }
   
 
   # Enable threaded mode
