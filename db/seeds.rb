@@ -20,12 +20,3 @@ user = User.where(:email => admin_email).first || User.new({
 user.admin = true
 user.save!
 
-
-User.new({
-  :name                   => 'Develon Admin',
-  :email                  => "andrea.zaupa@develon.com",
-  :password               => "develon!",
-  :password_confirmation  => "develon!"
-})
-user.admin = true
-user.save!
