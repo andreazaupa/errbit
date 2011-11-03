@@ -10,58 +10,68 @@ class Notice
   field :server_environment, :type => Hash
   field :request, :type => Hash
   field :notifier, :type => Hash
+  field :klass
 
-  referenced_in :err
+  belongs_to :err
   index :err_id
+  index :created_at
 
-  after_create :cache_last_notice_at
+  after_create :increase_counter_cache, :cache_attributes_on_problem, :unresolve_problem
   after_create :deliver_notification, :if => :should_notify?
-  before_create :increase_counter_cache, :cache_message
   before_save :sanitize
-  before_destroy :decrease_counter_cache
+  before_destroy :decrease_counter_cache, :remove_cached_attributes_from_problem
 
   validates_presence_of :backtrace, :server_environment, :notifier
 
   scope :ordered, order_by(:created_at.asc)
+  scope :for_errs, lambda {|errs| where(:err_id.in => errs.all.map(&:id))}
 
-  def self.from_xml(hoptoad_xml)
-    hoptoad_notice = Hoptoad::V2.parse_xml(hoptoad_xml)
-    app = App.find_by_api_key!(hoptoad_notice['api-key'])
-
-    hoptoad_notice['request'] ||= {}
-    hoptoad_notice['request']['component']  = 'unknown' if hoptoad_notice['request']['component'].blank?
-    hoptoad_notice['request']['action']     = nil if hoptoad_notice['request']['action'].blank?
-
-    err = Err.for({
-      :app      => app,
-      :klass        => hoptoad_notice['error']['class'],
-      :component    => hoptoad_notice['request']['component'],
-      :action       => hoptoad_notice['request']['action'],
-      :environment  => hoptoad_notice['server-environment']['environment-name'],
-      :fingerprint  => hoptoad_notice['fingerprint']
-    })
-    err.update_attributes(:resolved => false) if err.resolved?
-
-    err.notices.create!({
-      :message            => hoptoad_notice['error']['message'],
-      :backtrace          => hoptoad_notice['error']['backtrace']['line'],
-      :server_environment => hoptoad_notice['server-environment'],
-      :request            => hoptoad_notice['request'],
-      :notifier           => hoptoad_notice['notifier']
-    })
-  end
+  delegate :app, :problem, :to => :err
 
   def user_agent
     agent_string = env_vars['HTTP_USER_AGENT']
     agent_string.blank? ? nil : UserAgent.parse(agent_string)
   end
-  
-  def self.in_app_backtrace_line? line
+
+  def user_agent_string
+    (user_agent.nil? || user_agent.none?) ? "N/A" : "#{user_agent.browser} #{user_agent.version}"
+  end
+
+  def environment_name
+    server_environment['server-environment'] || server_environment['environment-name']
+  end
+
+  def component
+    request['component']
+  end
+
+  def action
+    request['action']
+  end
+
+  def where
+    where = component.to_s.dup
+    where << "##{action}" if action.present?
+    where
+  end
+
+  def self.in_app_backtrace_line?(line)
     !!(line['file'] =~ %r{^\[PROJECT_ROOT\]/(?!(vendor))})
   end
-  
+
   def request
     read_attribute(:request) || {}
+  end
+
+  def url
+    request['url']
+  end
+
+  def host
+    uri = url && URI.parse(url)
+    uri.blank? ? "N/A" : uri.host
+  rescue URI::InvalidURIError
+    "N/A"
   end
 
   def env_vars
@@ -80,33 +90,43 @@ class Notice
     Mailer.err_notification(self).deliver
   end
 
-  def cache_last_notice_at
-    err.update_attributes(:last_notice_at => created_at)
+  # Backtrace containing only files from the app itself (ignore gems)
+  def app_backtrace
+    backtrace.select { |l| l && l['file'] && l['file'].include?("[PROJECT_ROOT]") }
   end
-  
+
   protected
 
   def should_notify?
-    err.app.notify_on_errs? && Errbit::Config.email_at_notices.include?(err.notices.count) && err.app.watchers.any?
+    app.notify_on_errs? && (Errbit::Config.per_app_email_at_notices && app.email_at_notices || Errbit::Config.email_at_notices).include?(problem.notices_count) && app.notification_recipients.any?
   end
 
-
   def increase_counter_cache
-    err.inc(:notices_count,1)
+    problem.inc(:notices_count, 1)
   end
 
   def decrease_counter_cache
-    err.inc(:notices_count,-1)
+    problem.inc(:notices_count, -1) if err
   end
 
-  def cache_message
-    err.update_attribute(:message, message) if err.notices_count == 1
+  def remove_cached_attributes_from_problem
+    problem.remove_cached_notice_attribures(self) if err
+  end
+
+  def unresolve_problem
+    problem.update_attribute(:resolved, false) if problem.resolved?
+  end
+
+  def cache_attributes_on_problem
+    problem.cache_notice_attributes(self)
   end
 
   def sanitize
     [:server_environment, :request, :notifier].each do |h|
       send("#{h}=",sanitize_hash(send(h)))
     end
+    # Set unknown backtrace files
+    backtrace.each{|line| line['file'] = "[unknown source]" if line['file'].blank? }
   end
 
   def sanitize_hash(h)
@@ -121,4 +141,6 @@ class Notice
       end
     end
   end
+
 end
+

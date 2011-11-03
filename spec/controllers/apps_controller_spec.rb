@@ -6,6 +6,7 @@ describe AppsController do
   it_requires_authentication
   it_requires_admin_privileges :for => {:new => :get, :edit => :get, :create => :post, :update => :put, :destroy => :delete}
 
+
   describe "GET /apps" do
     context 'when logged in as an admin' do
       it 'finds all apps' do
@@ -38,8 +39,7 @@ describe AppsController do
         @user = Factory(:admin)
         sign_in @user
         @app = Factory(:app)
-        @err = Factory :err, :app => @app
-        @notice = Factory :notice, :err => @err
+        @problem = Factory(:notice, :err => Factory(:err, :problem => Factory(:problem, :app => @app))).problem
       end
 
       it 'finds the app' do
@@ -48,37 +48,108 @@ describe AppsController do
       end
 
       it "should not raise errors for app with err without notices" do
-        Factory :err, :app => @app
+        Factory(:err, :problem => Factory(:problem, :app => @app))
         lambda { get :show, :id => @app.id }.should_not raise_error
       end
 
       it "should list atom feed successfully" do
         get :show, :id => @app.id, :format => "atom"
         response.should be_success
-        response.body.should match(@err.message)
+        response.body.should match(@problem.message)
       end
 
       context "pagination" do
         before(:each) do
-          35.times { Factory :err, :app => @app }
+          35.times { Factory(:err, :problem => Factory(:problem, :app => @app)) }
         end
 
         it "should have default per_page value for user" do
           get :show, :id => @app.id
-          assigns(:errs).size.should == User::PER_PAGE
+          assigns(:problems).to_a.size.should == User::PER_PAGE
         end
 
         it "should be able to override default per_page value" do
           @user.update_attribute :per_page, 10
           get :show, :id => @app.id
-          assigns(:errs).size.should == 10
+          assigns(:problems).to_a.size.should == 10
+        end
+      end
+
+      context 'with resolved errors' do
+        before(:each) do
+          resolved_problem = Factory(:problem, :app => @app)
+          Factory(:notice, :err => Factory(:err, :problem => resolved_problem))
+          resolved_problem.resolve!
+        end
+
+        context 'and no params' do
+          it 'shows only unresolved problems' do
+            get :show, :id => @app.id
+            assigns(:problems).size.should == 1
+          end
+        end
+
+        context 'and all_problems=true params' do
+          it 'shows all errors' do
+            get :show, :id => @app.id, :all_errs => true
+            assigns(:problems).size.should == 2
+          end
+        end
+      end
+
+      context 'with environment filters' do
+        before(:each) do
+          environments = ['production', 'test', 'development', 'staging']
+          20.times do |i|
+            Factory.create(:problem, :app => @app, :environment => environments[i % environments.length])
+          end
+        end
+
+        context 'no params' do
+          it 'shows errs for all environments' do
+            get :show, :id => @app.id
+            assigns(:problems).size.should == 21
+          end
+        end
+
+        context 'environment production' do
+          it 'shows errs for just production' do
+            get :show, :id => @app.id, :environment => 'production'
+            assigns(:problems).size.should == 6
+          end
+        end
+
+        context 'environment staging' do
+          it 'shows errs for just staging' do
+            get :show, :id => @app.id, :environment => 'staging'
+            assigns(:problems).size.should == 5
+          end
+        end
+
+        context 'environment development' do
+          it 'shows errs for just development' do
+            get :show, :id => @app.id, :environment => 'development'
+            assigns(:problems).size.should == 5
+          end
+        end
+
+        context 'environment test' do
+          it 'shows errs for just test' do
+            get :show, :id => @app.id, :environment => 'test'
+            assigns(:problems).size.should == 5
+          end
         end
       end
     end
 
     context 'logged in as a user' do
       it 'finds the app if the user is watching it' do
-        pending
+        user = Factory(:user)
+        app = Factory(:app)
+        watcher = Factory(:user_watcher, :app => app, :user => user)
+        sign_in user
+        get :show, :id => app.id
+        assigns(:app).should == app
       end
 
       it 'does not find the app if the user is not watching it' do
@@ -102,6 +173,16 @@ describe AppsController do
         assigns(:app).should be_a(App)
         assigns(:app).should be_new_record
         assigns(:app).watchers.should_not be_empty
+      end
+
+      it "should copy attributes from an existing app" do
+        @app = Factory(:app, :name => "do not copy",
+                             :github_url => "github.com/test/example")
+        get :new, :copy_attributes_from => @app.id
+        assigns(:app).should be_a(App)
+        assigns(:app).should be_new_record
+        assigns(:app).name.should be_blank
+        assigns(:app).github_url.should == "github.com/test/example"
       end
     end
 
@@ -132,14 +213,6 @@ describe AppsController do
         it "should display a message" do
           post :create, :app => {}
           request.flash[:success].should match(/success/)
-        end
-      end
-
-      context "when the create is unsuccessful" do
-        it "should render the new page" do
-          @app.should_receive(:save).and_return(false)
-          post :create, :app => {}
-          response.should render_template(:new)
         end
       end
     end
@@ -176,89 +249,70 @@ describe AppsController do
         end
       end
 
+      context "changing email_at_notices" do
+        it "should parse legal csv values" do
+          put :update, :id => @app.id, :app => { :email_at_notices => '1,   4,      7,8,  10' }
+          @app.reload
+          @app.email_at_notices.should == [1, 4, 7, 8, 10]
+        end
+        context "failed parsing of CSV" do
+          it "should set the default value" do
+            @app = Factory(:app, :email_at_notices => [1, 2, 3, 4])
+            put :update, :id => @app.id, :app => { :email_at_notices => 'asdf, -1,0,foobar,gd00,0,abc' }
+            @app.reload
+            @app.email_at_notices.should == Errbit::Config.email_at_notices
+          end
+
+          it "should display a message" do
+            put :update, :id => @app.id, :app => { :email_at_notices => 'qwertyuiop' }
+            request.flash[:error].should match(/Couldn't parse/)
+          end
+        end
+      end
+
       context "setting up issue tracker", :cur => true do
         context "unknown tracker type" do
           before(:each) do
             put :update, :id => @app.id, :app => { :issue_tracker_attributes => {
-              :issue_tracker_type => 'unknown', :project_id => '1234', :api_token => '123123', :account => 'myapp'
+              :type => 'unknown', :project_id => '1234', :api_token => '123123', :account => 'myapp'
             } }
             @app.reload
           end
 
           it "should not create issue tracker" do
-            @app.issue_tracker.should be_nil
+            @app.issue_tracker_configured?.should == false
           end
         end
 
-        context "lighthouseapp" do
-          it "should save tracker params" do
-            put :update, :id => @app.id, :app => { :issue_tracker_attributes => {
-              :issue_tracker_type => 'lighthouseapp', :project_id => '1234', :api_token => '123123', :account => 'myapp'
-            } }
-            @app.reload
+        IssueTracker.subclasses.each do |tracker_klass|
+          context tracker_klass do
+            it "should save tracker params" do
+              params = tracker_klass::Fields.inject({}){|hash,f| hash[f[0]] = "test_value"; hash }
+              params['ticket_properties'] = "card_type = defect" if tracker_klass == MingleTracker
+              params['type'] = tracker_klass.to_s
+              put :update, :id => @app.id, :app => {:issue_tracker_attributes => params}
 
-            tracker = @app.issue_tracker
-            tracker.issue_tracker_type.should == 'lighthouseapp'
-            tracker.project_id.should == '1234'
-            tracker.api_token.should == '123123'
-            tracker.account.should == 'myapp'
-          end
+              @app.reload
+              tracker = @app.issue_tracker
+              tracker.should be_a(tracker_klass)
+              tracker_klass::Fields.each do |field, field_info|
+                case field
+                when :ticket_properties; tracker.send(field.to_sym).should == 'card_type = defect'
+                else tracker.send(field.to_sym).should == 'test_value'
+                end
+              end
+            end
 
-          it "should show validation notice when sufficient params are not present" do
-            put :update, :id => @app.id, :app => { :issue_tracker_attributes => {
-              :issue_tracker_type => 'lighthouseapp', :project_id => '1234', :api_token => '123123'
-            } }
-            @app.reload
+            it "should show validation notice when sufficient params are not present" do
+              # Leave out one required param
+              params = tracker_klass::Fields[1..-1].inject({}){|hash,f| hash[f[0]] = "test_value"; hash }
+              params['type'] = tracker_klass.to_s
+              put :update, :id => @app.id, :app => {:issue_tracker_attributes => params}
 
-            @app.issue_tracker.should be_nil
-            response.body.should match(/You must specify your Lighthouseapp account, api token and project id/)
-          end
-        end
-
-        context "redmine" do
-          it "should save tracker params" do
-            put :update, :id => @app.id, :app => { :issue_tracker_attributes => {
-              :issue_tracker_type => 'redmine', :project_id => '1234', :api_token => '123123', :account => 'http://myapp.com'
-            } }
-            @app.reload
-
-            tracker = @app.issue_tracker
-            tracker.issue_tracker_type.should == 'redmine'
-            tracker.project_id.should == '1234'
-            tracker.api_token.should == '123123'
-            tracker.account.should == 'http://myapp.com'
-          end
-
-          it "should show validation notice when sufficient params are not present" do
-            put :update, :id => @app.id, :app => { :issue_tracker_attributes => {
-              :issue_tracker_type => 'redmine', :project_id => '1234', :api_token => '123123'
-            } }
-            @app.reload
-
-            @app.issue_tracker.should be_nil
-            response.body.should match(/You must specify your Redmine url, api token and project id/)
-          end
-        end
-
-        context "pivotal" do
-          it "should save tracker params" do
-            put :update, :id => @app.id, :app => { :issue_tracker_attributes => {
-              :issue_tracker_type => 'pivotal', :project_id => '1234', :api_token => '123123' } }
-            @app.reload
-
-            tracker = @app.issue_tracker
-            tracker.issue_tracker_type.should == 'pivotal'
-            tracker.project_id.should == '1234'
-            tracker.api_token.should == '123123'
-          end
-
-          it "should show validation notice when sufficient params are not present" do
-            put :update, :id => @app.id, :app => { :issue_tracker_attributes => {
-              :issue_tracker_type => 'pivotal', :project_id => '1234' } }
-            @app.reload
-
-            @app.issue_tracker.should be_nil
-            response.body.should match(/You must specify your Pivotal Tracker api token and project id/)
+              @app.reload
+              @app.issue_tracker_configured?.should == false
+              response.body.should match(/You must specify your/)
+            end
           end
         end
       end
@@ -292,4 +346,6 @@ describe AppsController do
     end
   end
 
+
 end
+
