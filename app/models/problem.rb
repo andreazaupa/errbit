@@ -2,6 +2,14 @@
 # reported as various Errs, but the user has grouped the
 # Errs together as belonging to the same problem.
 
+## Add methode nan? in Time because needed by #max(:created_at)
+#
+# Fix on  Mongoid > 2.3.x with commit :
+# https://github.com/mongoid/mongoid/commit/5481556e24480f0a1783f85d6b5b343b0cef7192
+class Time
+  def nan?; false ;end
+end
+
 class Problem
   include Mongoid::Document
   include Mongoid::Timestamps
@@ -18,9 +26,9 @@ class Problem
   field :environment
   field :klass
   field :where
-  field :user_agents, :type => Array, :default => []
-  field :messages, :type => Array, :default => []
-  field :hosts, :type => Array, :default => []
+  field :user_agents, :type => Hash, :default => {}
+  field :messages,    :type => Hash, :default => {}
+  field :hosts,       :type => Hash, :default => {}
   field :comments_count, :type => Integer, :default => 0
 
   index :app_id
@@ -116,7 +124,9 @@ class Problem
       self.last_deploy_at = if (last_deploy = app.deploys.where(:environment => self.environment).last)
         last_deploy.created_at
       end
-      self.save if persisted?
+      collection.update({'_id' => self.id},
+                        {'$set' => {'app_name' => self.app_name,
+                          'last_deploy_at' => self.last_deploy_at}})
     end
   end
 
@@ -128,19 +138,45 @@ class Problem
       :environment => notice.environment_name,
       :klass => notice.klass,
       :where => notice.where,
-      :messages => messages.push(notice.message),
-      :hosts => hosts.push(notice.host),
-      :user_agents => user_agents.push(notice.user_agent_string)
+      :messages    => attribute_count_increase(:messages, notice.message),
+      :hosts       => attribute_count_increase(:hosts, notice.host),
+      :user_agents => attribute_count_increase(:user_agents, notice.user_agent_string)
       ) if notice
     update_attributes!(attrs)
   end
 
   def remove_cached_notice_attribures(notice)
-    messages.delete_at(messages.index(notice.message))
-    hosts.delete_at(hosts.index(notice.host))
-    user_agents.delete_at(user_agents.index(notice.user_agent_string))
-    save!
+    update_attributes!(
+      :messages    => attribute_count_descrease(:messages, notice.message),
+      :hosts       => attribute_count_descrease(:hosts, notice.host),
+      :user_agents => attribute_count_descrease(:user_agents, notice.user_agent_string)
+    )
   end
+
+  private
+    def attribute_count_increase(name, value)
+      counter, index = send(name), attribute_index(value)
+      if counter[index].nil?
+        counter[index] = {'value' => value, 'count' => 1}
+      else
+        counter[index]['count'] += 1
+      end
+      counter
+    end
+
+    def attribute_count_descrease(name, value)
+      counter, index = send(name), attribute_index(value)
+      if counter[index]['count'] > 1
+        counter[index]['count'] -= 1
+      else
+        counter.delete(index)
+      end
+      counter
+    end
+
+    def attribute_index(value)
+      Digest::MD5.hexdigest(value.to_s)
+    end
 
 end
 
