@@ -97,6 +97,8 @@ class Notice
 
   protected
 
+
+  #TODO cambiare in modo che da configurazione app sia possibile far notificare ogni volta!
   def should_notify?
     app.notify_on_errs? && (Errbit::Config.per_app_email_at_notices && app.email_at_notices || Errbit::Config.email_at_notices).include?(problem.notices_count) && app.notification_recipients.any?
   end
