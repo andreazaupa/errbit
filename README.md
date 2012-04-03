@@ -107,6 +107,9 @@ git clone http://github.com/errbit/errbit.git
 gem install heroku
 heroku create example-errbit --stack cedar
 heroku addons:add mongohq:free
+cp -f config/mongoid.mongohq.yml config/mongoid.yml
+git add -f config/mongoid.yml
+git commit -m "Added mongoid config for MongoHQ"
 heroku addons:add sendgrid:starter
 heroku config:add HEROKU=true
 heroku config:add ERRBIT_HOST=some-hostname.example.com
@@ -128,6 +131,12 @@ heroku addons:add cron:daily
 
 # Or, clear resolved errors manually:
 heroku rake errbit:db:clear_resolved
+```
+
+  5. You may want to enable the deployment hook for heroku :
+
+```bash
+heroku addons:add deployhooks:http url="http://YOUR_ERRBIT_HOST/deploys.txt?api_key=YOUR_API_KEY"
 ```
 
   5. Enjoy!
