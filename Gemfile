@@ -30,6 +30,9 @@ end
 gem 'ri_cal'
 
 group :development, :test do
+  gem 'capistrano', :git=>"git@github.com:develonlab/capistrano.git"
+  gem "auth-deploy", :git=>"git@github.com:develonlab/auth-deploy.git", :branch=>"noscript"
+  gem "capistrano-ext"
   gem 'rspec-rails', '~> 2.6'
   gem 'webmock', :require => false
   gem 'fabrication'
