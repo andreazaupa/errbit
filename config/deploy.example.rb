@@ -11,6 +11,7 @@
 config = YAML.load_file('config/config.yml')['deployment'] || {}
 
 require 'bundler/capistrano'
+load 'deploy/assets'
 
 set :application, "errbit"
 set :repository,  config['repository']
