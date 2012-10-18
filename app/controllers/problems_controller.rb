@@ -1,4 +1,4 @@
-class ErrsController < ApplicationController
+class ProblemsController < ApplicationController
   include ActionView::Helpers::TextHelper
 
   before_filter :find_app, :except => [:index, :all, :destroy_several, :resolve_several, :unresolve_several, :merge_several, :unmerge_several]
@@ -46,7 +46,7 @@ class ErrsController < ApplicationController
       else
         @tracker = GithubIssuesTracker.new(
           :app         => @app,
-          :login       => current_user.github_login,
+          :username    => current_user.github_login,
           :oauth_token => current_user.github_oauth_token
         )
       end
@@ -69,12 +69,12 @@ class ErrsController < ApplicationController
       end
     end
 
-    redirect_to app_err_path(@app, @problem)
+    redirect_to app_problem_path(@app, @problem)
   end
 
   def unlink_issue
     @problem.update_attribute :issue_link, nil
-    redirect_to app_err_path(@app, @problem)
+    redirect_to app_problem_path(@app, @problem)
   end
 
   def resolve
@@ -114,8 +114,8 @@ class ErrsController < ApplicationController
   end
 
   def destroy_several
-    @selected_problems.each(&:destroy)
-    flash[:notice] = "#{pluralize(@selected_problems.count, 'err has', 'errs have')} been deleted."
+    nb_problem_destroy = ProblemDestroy.execute(@selected_problems)
+    flash[:notice] = "#{pluralize(nb_problem_destroy, 'err has', 'errs have')} been deleted."
     redirect_to :back
   end
 

@@ -11,6 +11,7 @@ class Notice
   field :request, :type => Hash
   field :notifier, :type => Hash
   field :user_attributes, :type => Hash
+  field :current_user, :type => Hash
   field :error_class
 
   belongs_to :err
@@ -120,7 +121,7 @@ class Notice
   end
 
   def remove_cached_attributes_from_problem
-    problem.remove_cached_notice_attribures(self) if err
+    problem.remove_cached_notice_attributes(self) if err
   end
 
   def unresolve_problem

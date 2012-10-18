@@ -1,15 +1,14 @@
 require 'spec_helper'
 
-describe "errs/show.html.haml" do
+describe "problems/show.html.haml" do
   before do
-    err = Fabricate(:err)
-    problem = err.problem
+    problem = Fabricate(:problem)
     comment = Fabricate(:comment)
     assign :problem, problem
     assign :comment, comment
     assign :app, problem.app
-    assign :notices, err.notices.page(1).per(1)
-    assign :notice, err.notices.first
+    assign :notices, problem.notices.page(1).per(1)
+    assign :notice, problem.notices.first
     controller.stub(:current_user) { Fabricate(:user) }
   end
 
@@ -41,25 +40,25 @@ describe "errs/show.html.haml" do
       Errbit::Config.stub(:confirm_resolve_err).and_return(false)
       render
 
-      action_bar.should_not have_selector('a.resolve[data-confirm]')
+      action_bar.should have_selector('a.resolve[data-confirm="null"]')
     end
 
     it "should link 'up' to HTTP_REFERER if is set" do
-      url = 'http://localhost:3000/errs'
+      url = 'http://localhost:3000/problems'
       controller.request.env['HTTP_REFERER'] = url
       render
 
       action_bar.should have_selector("span a.up[href='#{url}']", :text => 'up')
     end
 
-    it "should link 'up' to app_errs_path if HTTP_REFERER isn't set'" do
+    it "should link 'up' to app_problems_path if HTTP_REFERER isn't set'" do
       controller.request.env['HTTP_REFERER'] = nil
       problem = Fabricate(:problem_with_comments)
       assign :problem, problem
       assign :app, problem.app
       render
 
-      action_bar.should have_selector("span a.up[href='#{app_errs_path(problem.app)}']", :text => 'up')
+      action_bar.should have_selector("span a.up[href='#{app_problems_path(problem.app)}']", :text => 'up')
     end
 
     context 'create issue links' do
@@ -90,6 +89,7 @@ describe "errs/show.html.haml" do
   describe "content_for :comments with comments disabled for configured issue tracker" do
     before do
       Errbit::Config.stub(:allow_comments_with_issue_tracker).and_return(false)
+      Errbit::Config.stub(:use_gravatar).and_return(true)
     end
 
     it 'should display comments and new comment form when no issue tracker' do
@@ -99,6 +99,7 @@ describe "errs/show.html.haml" do
       render
 
       view.content_for(:comments).should include('Test comment')
+      view.content_for(:comments).should have_selector('img[src^="http://www.gravatar.com/avatar"]')
       view.content_for(:comments).should include('Add a comment')
     end
 
@@ -117,6 +118,7 @@ describe "errs/show.html.haml" do
         render
 
         view.content_for(:comments).should include('Test comment')
+        view.content_for(:comments).should have_selector('img[src^="http://www.gravatar.com/avatar"]')
         view.content_for(:comments).should_not include('Add a comment')
       end
     end

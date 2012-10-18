@@ -1,7 +1,10 @@
-# Errbit [![TravisCI][travis-img-url]][travis-ci-url]
+# Errbit [![TravisCI][travis-img-url]][travis-ci-url] [![Code Climate][codeclimate-img-url]][codeclimate-url]
 
 [travis-img-url]: https://secure.travis-ci.org/errbit/errbit.png?branch=master
 [travis-ci-url]: http://travis-ci.org/errbit/errbit
+[codeclimate-img-url]: https://codeclimate.com/badge.png
+[codeclimate-url]: https://codeclimate.com/github/errbit/errbit
+
 
 ### The open source, self-hosted error catcher
 
@@ -57,12 +60,17 @@ If this doesn't sound like you, you should probably stick with [Airbrake](http:/
 The [Thoughtbot](http://thoughtbot.com) guys offer great support for it and it is much more worry-free.
 They have a free package and even offer a *"Airbrake behind your firewall"* solution.
 
+Mailing List
+------------
+
+Join the Google Group at https://groups.google.com/group/errbit to receive updates and notifications.
+
 Demo
 ----
 
 There is a demo available at [http://errbit-demo.herokuapp.com/](http://errbit-demo.herokuapp.com/)
 
-Email: demo@errbit-demo.herokuapp.com
+Email: demo@errbit-demo.herokuapp.com<br/>
 Password: password
 
 Installation
@@ -144,10 +152,7 @@ git clone http://github.com/errbit/errbit.git
 ```bash
 gem install heroku
 heroku create example-errbit --stack cedar
-heroku addons:add mongohq:free
-cp -f config/mongoid.mongohq.yml config/mongoid.yml
-git add -f config/mongoid.yml
-git commit -m "Added mongoid config for MongoHQ"
+heroku addons:add mongolab:starter
 heroku addons:add sendgrid:starter
 heroku config:add HEROKU=true
 heroku config:add ERRBIT_HOST=some-hostname.example.com
@@ -168,7 +173,7 @@ heroku run rake db:seed
     ```bash
     # Install the heroku scheduler add-on
     heroku addons:add scheduler:standard
-    
+
     # Go open the dashboard to schedule the job.  You should use
     # 'rake errbit:db:clear_resolved' as the task command, and schedule it
     # at whatever frequency you like (once/day should work great).
@@ -191,7 +196,7 @@ heroku run rake db:seed
   * You may want to enable the deployment hook for heroku :
 
 ```bash
-heroku addons:add deployhooks:http url="http://YOUR_ERRBIT_HOST/deploys.txt?api_key=YOUR_API_KEY"
+heroku addons:add deployhooks:http --url="http://YOUR_ERRBIT_HOST/deploys.txt?api_key=YOUR_API_KEY"
 ```
 
   * Enjoy!
@@ -232,6 +237,43 @@ You can change the requested account permissions by setting `github_access_scope
   <tr><th>[] </th><td>No permission to create issues on any repos.</td></tr>
 </table>
 
+
+### GitHub authentication when served on Heroku
+
+You will need to set up Heroku variables accordingly as described in [Configuring GitHub authentication](#configuring-github-authentication):
+
+* GITHUB_AUTHENTICATION
+
+```bash
+heroku config:add GITHUB_AUTHENTICATION=true
+```
+
+* GITHUB_CLIENT_ID
+
+```bash
+heroku config:add GITHUB_CLIENT_ID=the_client_id_provided_by_GitHub
+```
+
+* GITHUB_SECRET
+
+```bash
+heroku config:add GITHUB_SECRET=the_secret_provided_by_GitHub
+```
+
+* GITHUB_ACCESS_SCOPE - set only one scope `repo` or `public_repo`. If you really need to put more than one, separate them with comma.
+
+```bash
+heroku config:add GITHUB_ACCESS_SCOPE=repo,public_repo
+```
+
+__Note__: To avoid restarting your Heroku app 4 times you can set Heroku variables in a single command, i.e:
+
+```bash
+heroku config:add GITHUB_AUTHENTICATION=true \
+GITHUB_CLIENT_ID=the_client_id_provided_by_GitHub \
+GITHUB_SECRET=the_secret_provided_by_GitHub \
+GITHUB_ACCESS_SCOPE=repo,public_repo
+```
 
 ### Configuring LDAP authentication:
 
@@ -320,6 +362,12 @@ card_type = Defect, status = Open, priority = Essential
 * For 'Account/Repository', the account will either be a username or organization. i.e. **errbit/errbit**
 * You will also need to provide your username and password for your GitHub account.
   * (We'd really appreciate it if you wanted to help us implement OAuth instead!)
+  
+**Bitbucket Issues Integration**
+
+* For 'BITBUCKET REPO' field, the account will either be a username or organization. i.e. **errbit/errbit**
+* You will also need to provide your username and password for your Bitbucket account.
+
 
 
 What if Errbit has an error?
@@ -346,6 +394,23 @@ or you can set up the GitHub Issues tracker for your **Self.Errbit** app:
 
   * You can now easily post bug reports to GitHub Issues by clicking the **Create Issue** button on a **Self.Errbit** error.
 
+
+Use Errbit with applications written in other languages
+-------------------------------------------------------
+
+In theory, any Airbrake-compatible error catcher for other languages should work with Errbit.
+Solutions known to work are listed below:
+
+<table>
+  <tr>
+    <th>PHP (&gt;= 5.3)</th>
+    <td>https://github.com/flippa/errbit-php</td>
+  </tr>
+  <tr>
+    <th>Python</th>
+    <td>https://github.com/mkorenkov/errbit.py , https://github.com/pulseenergy/airbrakepy</td>
+  </tr>
+</table>
 
 TODO
 ----
