@@ -11,7 +11,7 @@ if %w(development test).include? Rails.env
 else
 
   if ENV['SECRET_TOKEN'].present?
-    Errbit::Application.config.secret_token = ENV['SECRET_TOKEN']
+    Errbit::Application.config.secret_token = "fA58ed69266dc8ad0ca79363c3d2f945c388a9c5920fc9a1ae99a98fbb619f135001c6434849b625884a9405a60cd3d50fc3e3b07ecd38cbed7406a4fcc5b59A"
 
   # Do not raise an error if secret token is not available during assets precompilation
   elsif ENV['RAILS_GROUPS'] != 'assets'
