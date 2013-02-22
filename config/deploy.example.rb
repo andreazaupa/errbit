@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-=======
 # Deploy Config
 # =============
 #
@@ -40,7 +38,9 @@ set :scm_verbose, true
 set(:current_branch) { `git branch`.match(/\* (\S+)\s/m)[1] || raise("Couldn't determine current branch") }
 set :branch, defer { current_branch }
 
-after 'deploy:update_code', 'errbit:symlink_configs'
+before 'deploy:assets:symlink', 'errbit:symlink_configs'
+# if unicorn is started through something like runit (the tool which restarts the process when it's stopped)
+# after 'deploy:restart', 'unicorn:stop'
 
 namespace :deploy do
   task :start do ; end
@@ -56,6 +56,12 @@ namespace :errbit do
     run "mkdir -p #{shared_configs}"
     run "if [ ! -f #{shared_configs}/config.yml ]; then cp #{latest_release}/config/config.example.yml #{shared_configs}/config.yml; fi"
     run "if [ ! -f #{shared_configs}/mongoid.yml ]; then cp #{latest_release}/config/mongoid.example.yml #{shared_configs}/mongoid.yml; fi"
+
+    # Generate unique secret token
+    run %Q{if [ ! -f #{shared_configs}/secret_token.rb ]; then
+      cd #{current_release};
+      echo "Errbit::Application.config.secret_token = '$(bundle exec rake secret)'" > #{shared_configs}/secret_token.rb;
+    fi}.compact
   end
 
   task :symlink_configs do
@@ -64,6 +70,7 @@ namespace :errbit do
     release_configs = File.join(release_path,'config')
     run("ln -nfs #{shared_configs}/config.yml #{release_configs}/config.yml")
     run("ln -nfs #{shared_configs}/mongoid.yml #{release_configs}/mongoid.yml")
+    run("ln -nfs #{shared_configs}/secret_token.rb #{release_configs}/initializers/secret_token.rb")
   end
 end
 
@@ -74,4 +81,25 @@ namespace :db do
   end
 end
 
->>>>>>> 7dd78504b4dcb3a727fe1bdb001a3524af6817ca
+
+namespace :unicorn do
+  set(:unicorn_pid) do
+    path = config['pids'] || "#{deploy_to}/shared/pids"
+    "`cat #{path}/unicorn.pid`"
+  end
+
+  desc 'Reload unicorn'
+  task :reload, :roles => :app, :except => { :no_release => true } do
+    run "kill -HUP #{unicorn_pid}"
+  end
+
+  desc 'Stop unicorn'
+  task :stop, :roles => :app, :except => { :no_release => true } do
+    run "kill -QUIT #{unicorn_pid}"
+  end
+
+  desc 'Reexecute unicorn'
+  task :reexec, :roles => :app, :except => { :no_release => true } do
+    run "kill -USR2 #{unicorn_pid}"
+  end
+end
